@@ -13,7 +13,9 @@ func main() {
 
 	p := &AutoPrivilege{Opts: opts}
 
-	printBanner()
+	if !opts.JSON {
+		printBanner()
+	}
 
 	if opts.UpdateGTFO {
 		if err := updateGTFOBins(opts); err != nil {
@@ -25,8 +27,10 @@ func main() {
 		}
 	}
 
-	fmt.Printf("  UID: %-10s  PID: %-8d  Host: %s\n\n",
-		amIRoot(), os.Getpid(), hostname())
+	if !opts.JSON {
+		fmt.Printf("  UID: %-10s  PID: %-8d  Host: %s\n\n",
+			amIRoot(), os.Getpid(), hostname())
+	}
 
 	// FASE 1: Scan
 	if !opts.Quiet && !opts.JSON {

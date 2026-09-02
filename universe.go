@@ -50,45 +50,45 @@ func (r RiskLevel) Color() string {
 }
 
 type Finding struct {
-	Source      string   `json:"source"`
-	Target      string   `json:"target"`
-	Description string   `json:"description"`
+	Source      string    `json:"source"`
+	Target      string    `json:"target"`
+	Description string    `json:"description"`
 	Risk        RiskLevel `json:"risk"`
-	Exploitable bool     `json:"exploitable"`
+	Exploitable bool      `json:"exploitable"`
 }
 
 type Vector struct {
-	Name     string                 `json:"name"`
-	Risk     RiskLevel              `json:"risk"`
-	Target   string                 `json:"target"`
-	Command  string                 `json:"command"`
-	Category string                 `json:"category"`
+	Name     string                `json:"name"`
+	Risk     RiskLevel             `json:"risk"`
+	Target   string                `json:"target"`
+	Command  string                `json:"command"`
+	Category string                `json:"category"`
 	Exploit  func() *ExploitResult `json:"-"`
 	Meta     map[string]string     `json:"meta,omitempty"`
 }
 
 type ExploitResult struct {
-	Success   bool   `json:"success"`
-	Vector    string `json:"vector"`
-	Output    string `json:"output,omitempty"`
-	Error     string `json:"error,omitempty"`
-	IsRoot    bool   `json:"is_root"`
+	Success bool   `json:"success"`
+	Vector  string `json:"vector"`
+	Output  string `json:"output,omitempty"`
+	Error   string `json:"error,omitempty"`
+	IsRoot  bool   `json:"is_root"`
 }
 
 type Options struct {
-	Exploit      bool
-	MaxRisk      RiskLevel
-	Vector       string
-	JSON         bool
-	Quiet        bool
-	Rooteame     string
-	Stealth      bool
-	OneShot      bool
-	LHost        string
-	LPort        string
-	DryRun       bool
-	LogFormat    string
-	UpdateGTFO   bool
+	Exploit    bool
+	MaxRisk    RiskLevel
+	Vector     string
+	JSON       bool
+	Quiet      bool
+	Rooteame   string
+	Stealth    bool
+	OneShot    bool
+	LHost      string
+	LPort      string
+	DryRun     bool
+	LogFormat  string
+	UpdateGTFO bool
 }
 
 type AutoPrivilege struct {

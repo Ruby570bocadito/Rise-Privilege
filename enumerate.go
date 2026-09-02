@@ -46,37 +46,42 @@ func enumerateAll(p *AutoPrivilege) {
 }
 
 func enumerateVector(p *AutoPrivilege, name string) {
+	// Support comma-separated vectors: --vector suid,sudo,cron
+	names := map[string]bool{}
+	for _, n := range strings.Split(name, ",") {
+		names[strings.TrimSpace(n)] = true
+	}
 	// Filter findings for specific vector
 	for _, f := range p.Findings {
 		if !f.Exploitable {
 			continue
 		}
-		switch name {
-		case "suid":
-			if f.Source == "SUID" {
-				enumerateSUID(p, f)
-			}
-		case "sudo":
-			if f.Source == "SUDO" {
-				enumerateSUDO(p, f)
-			}
-		case "cron":
-			if f.Source == "CRON" {
-				enumerateCRON(p, f)
-			}
-		case "passwd":
-			if f.Source == "FILE" && f.Target == "/etc/passwd" {
-				enumeratePasswd(p)
-			}
-		case "docker":
-			if f.Source == "DOCKER" {
-				enumerateDocker(p)
-			}
+		if names["suid"] && f.Source == "SUID" {
+			enumerateSUID(p, f)
+		}
+		if names["sudo"] && f.Source == "SUDO" {
+			enumerateSUDO(p, f)
+		}
+		if names["cron"] && f.Source == "CRON" {
+			enumerateCRON(p, f)
+		}
+		if names["passwd"] && f.Source == "FILE" && f.Target == "/etc/passwd" {
+			enumeratePasswd(p)
+		}
+		if names["docker"] && f.Source == "DOCKER" {
+			enumerateDocker(p)
 		}
 	}
 }
 
 func addVector(p *AutoPrivilege, name, category, target, command string, risk RiskLevel, fn func() *ExploitResult, meta map[string]string) {
+	// De-duplicate: a target can produce several findings that map to the
+	// same vector (e.g. /etc/shadow "readable" + "writable").
+	for _, existing := range p.Vectors {
+		if existing.Name == name && existing.Target == target {
+			return
+		}
+	}
 	v := Vector{
 		Name:     name,
 		Category: category,
