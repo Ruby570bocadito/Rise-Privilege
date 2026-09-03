@@ -1,6 +1,8 @@
 package main
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -116,9 +118,93 @@ func TestAmIRoot(t *testing.T) {
 
 func TestJSONExport(t *testing.T) {
 	p := &AutoPrivilege{
-		Opts: Options{JSON: false},
+		Opts:     Options{JSON: false},
 		Findings: []Finding{{Source: "test", Description: "test"}},
 	}
 	// Should not panic
 	p.ExportJSON()
+}
+
+// --- Regression tests for the audit fixes ---
+
+func TestIsWritableByCurrentUser(t *testing.T) {
+	dir := t.TempDir()
+	mk := func(name string, mode os.FileMode) string {
+		path := filepath.Join(dir, name)
+		if err := os.WriteFile(path, []byte("x"), mode); err != nil {
+			t.Fatal(err)
+		}
+		return path
+	}
+	if !isWritableByCurrentUser(mk("w-owner", 0600)) {
+		t.Error("0600 owned file should be writable")
+	}
+	if isWritableByCurrentUser(mk("w-none", 0000)) {
+		t.Error("0000 file should not be writable")
+	}
+	if !isWritableByCurrentUser(mk("w-other", 0666)) {
+		t.Error("0666 file should be writable")
+	}
+}
+
+func TestIsReadableByCurrentUser(t *testing.T) {
+	dir := t.TempDir()
+	mk := func(name string, mode os.FileMode) string {
+		path := filepath.Join(dir, name)
+		if err := os.WriteFile(path, []byte("x"), mode); err != nil {
+			t.Fatal(err)
+		}
+		return path
+	}
+	if !isReadableByCurrentUser(mk("r-owner", 0400)) {
+		t.Error("0400 owned file should be readable")
+	}
+	if isReadableByCurrentUser(mk("r-none", 0000)) {
+		t.Error("0000 file should not be readable")
+	}
+	if !isReadableByCurrentUser(mk("r-other", 0444)) {
+		t.Error("0444 file should be readable")
+	}
+}
+
+func TestSymlinkTargetPermissions(t *testing.T) {
+	// A symlink itself always reports 0777 to Lstat; the check must follow
+	// it and evaluate the TARGET permissions.
+	dir := t.TempDir()
+	target := filepath.Join(dir, "target")
+	if err := os.WriteFile(target, []byte("x"), 0000); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(dir, "link")
+	if err := os.Symlink(target, link); err != nil {
+		t.Fatal(err)
+	}
+	if isWritableByCurrentUser(link) {
+		t.Error("symlink to 0000 file must not be writable")
+	}
+	if isReadableByCurrentUser(link) {
+		t.Error("symlink to 0000 file must not be readable")
+	}
+}
+
+func TestAddVectorDedupe(t *testing.T) {
+	p := &AutoPrivilege{Opts: Options{}}
+	addVector(p, "shadow readable", "shadow", "/etc/shadow", "cmd", RiskHigh, nil, nil)
+	addVector(p, "shadow readable", "shadow", "/etc/shadow", "cmd", RiskHigh, nil, nil)
+	if len(p.Vectors) != 1 {
+		t.Errorf("expected 1 vector after dedupe, got %d", len(p.Vectors))
+	}
+}
+
+func TestEnumerateVectorCommaSeparated(t *testing.T) {
+	p := &AutoPrivilege{Opts: Options{}}
+	p.Findings = []Finding{
+		{Source: "SUID", Target: "/usr/bin/python3", Description: "SUID", Exploitable: true, Risk: RiskHigh},
+		{Source: "SUDO", Target: "/usr/bin/find", Description: "NOPASSWD sudo", Exploitable: true, Risk: RiskHigh},
+		{Source: "DOCKER", Target: "docker", Description: "docker", Exploitable: true, Risk: RiskHigh},
+	}
+	enumerateVector(p, "suid,sudo")
+	if len(p.Vectors) != 2 {
+		t.Errorf("expected 2 vectors for 'suid,sudo', got %d", len(p.Vectors))
+	}
 }

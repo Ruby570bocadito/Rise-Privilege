@@ -78,17 +78,37 @@ func log(level LogLevel, module, msg, detail string, opts Options) {
 	}
 }
 
-func logScanStart(opts Options)             { log(LogInfo, "scanner", "Starting system scan...", "", opts) }
-func logScanSUID(count int, opts Options)   { log(LogInfo, "scanner", fmt.Sprintf("Found %d SUID binaries", count), "", opts) }
-func logScanSudo(count int, opts Options)   { log(LogInfo, "scanner", fmt.Sprintf("Found %d sudo vectors", count), "", opts) }
-func logScanCron(count int, opts Options)   { log(LogInfo, "scanner", fmt.Sprintf("Found %d writable cron jobs", count), "", opts) }
-func logScanKernel(kernel string, opts Options) { log(LogInfo, "scanner", "Kernel version detected", kernel, opts) }
-func logScanCreds(count int, opts Options)  { log(LogInfo, "scanner", fmt.Sprintf("Found %d credential vectors", count), "", opts) }
-func logEnumStart(opts Options)             { log(LogInfo, "enum", "Enumerating exploit vectors...", "", opts) }
-func logExploitStart(opts Options)          { log(LogInfo, "exploit", "Starting exploitation...", "", opts) }
-func logExploitSkip(name string, opts Options) { log(LogWarn, "exploit", fmt.Sprintf("Skipped %s (risk exceeds max)", name), "", opts) }
-func logExploitTry(name string, opts Options)  { log(LogInfo, "exploit", fmt.Sprintf("Attempting %s...", name), "", opts) }
-func logExploitSuccess(name string, opts Options) { log(LogInfo, "exploit", fmt.Sprintf("Exploit succeeded: %s", name), "", opts) }
-func logExploitFail(name string, err string, opts Options) { log(LogError, "exploit", fmt.Sprintf("Exploit failed: %s", name), err, opts) }
-func logRootObtained(vector string, opts Options) { log(LogInfo, "exploit", "ROOT OBTAINED", vector, opts) }
-func logDryRun(opts Options)                { log(LogWarn, "main", "Dry-run mode — exploitation skipped", "", opts) }
+func logScanStart(opts Options) { log(LogInfo, "scanner", "Starting system scan...", "", opts) }
+func logScanSUID(count int, opts Options) {
+	log(LogInfo, "scanner", fmt.Sprintf("Found %d SUID binaries", count), "", opts)
+}
+func logScanSudo(count int, opts Options) {
+	log(LogInfo, "scanner", fmt.Sprintf("Found %d sudo vectors", count), "", opts)
+}
+func logScanCron(count int, opts Options) {
+	log(LogInfo, "scanner", fmt.Sprintf("Found %d writable cron jobs", count), "", opts)
+}
+func logScanKernel(kernel string, opts Options) {
+	log(LogInfo, "scanner", "Kernel version detected", kernel, opts)
+}
+func logScanCreds(count int, opts Options) {
+	log(LogInfo, "scanner", fmt.Sprintf("Found %d credential vectors", count), "", opts)
+}
+func logEnumStart(opts Options)    { log(LogInfo, "enum", "Enumerating exploit vectors...", "", opts) }
+func logExploitStart(opts Options) { log(LogInfo, "exploit", "Starting exploitation...", "", opts) }
+func logExploitSkip(name string, opts Options) {
+	log(LogWarn, "exploit", fmt.Sprintf("Skipped %s (risk exceeds max)", name), "", opts)
+}
+func logExploitTry(name string, opts Options) {
+	log(LogInfo, "exploit", fmt.Sprintf("Attempting %s...", name), "", opts)
+}
+func logExploitSuccess(name string, opts Options) {
+	log(LogInfo, "exploit", fmt.Sprintf("Exploit succeeded: %s", name), "", opts)
+}
+func logExploitFail(name string, err string, opts Options) {
+	log(LogError, "exploit", fmt.Sprintf("Exploit failed: %s", name), err, opts)
+}
+func logRootObtained(vector string, opts Options) {
+	log(LogInfo, "exploit", "ROOT OBTAINED", vector, opts)
+}
+func logDryRun(opts Options) { log(LogWarn, "main", "Dry-run mode — exploitation skipped", "", opts) }

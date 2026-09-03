@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 )
@@ -237,11 +238,8 @@ func scanCron(p *AutoPrivilege) {
 
 // --- /etc/passwd writable ---
 func scanPasswd(p *AutoPrivilege) {
-	info, err := os.Lstat("/etc/passwd")
-	if err != nil {
-		return
-	}
-	if info.Mode().Perm()&0200 != 0 {
+	// Only flag if the CURRENT user can actually write it (not the owner bits).
+	if isWritableByCurrentUser("/etc/passwd") {
 		addFinding(p, "FILE", "/etc/passwd",
 			"Writable /etc/passwd — inject root user",
 			RiskHigh, true)
@@ -250,16 +248,12 @@ func scanPasswd(p *AutoPrivilege) {
 
 // --- /etc/shadow readable/writable ---
 func scanShadow(p *AutoPrivilege) {
-	info, err := os.Lstat("/etc/shadow")
-	if err != nil {
-		return
-	}
-	if info.Mode().Perm()&0400 != 0 {
+	if isReadableByCurrentUser("/etc/shadow") {
 		addFinding(p, "FILE", "/etc/shadow",
 			"Readable /etc/shadow — crack root hash",
 			RiskHigh, true)
 	}
-	if info.Mode().Perm()&0200 != 0 {
+	if isWritableByCurrentUser("/etc/shadow") {
 		addFinding(p, "FILE", "/etc/shadow",
 			"Writable /etc/shadow — set root password",
 			RiskDanger, true)
@@ -288,10 +282,8 @@ func scanDocker(p *AutoPrivilege) {
 
 	// Check if docker socket is accessible
 	if _, err := os.Stat("/var/run/docker.sock"); err == nil {
-		info, _ := os.Lstat("/var/run/docker.sock")
-		if info != nil && info.Mode().Perm()&0060 != 0 {
-			// Socket is readable by non-root
-		}
+		// Membership in the docker group is checked above; socket access is
+		// implied by group membership on standard installs.
 	}
 }
 
@@ -305,8 +297,10 @@ func scanCapabilities(p *AutoPrivilege) {
 		return
 	}
 
-	lines := strings.Split(string(data), "\n")
-	for _, line := range lines {
+	// Check effective capabilities by decoding the hex mask.
+	// cap_sys_ptrace is capability bit 19 (0x80000).
+	const capSysPtrace = uint64(1) << 19
+	for _, line := range strings.Split(string(data), "\n") {
 		if strings.HasPrefix(line, "CapEff:") {
 			eff := strings.TrimSpace(strings.TrimPrefix(line, "CapEff:"))
 			if eff != "0000000000000000" && eff != "0" {
@@ -315,20 +309,10 @@ func scanCapabilities(p *AutoPrivilege) {
 					"Process has non-default capabilities",
 					RiskLow, true)
 			}
-		}
-	}
-
-	// Check cap_sys_ptrace specifically via /proc/self/status
-	if strings.Contains(string(data), "CapEff:") {
-		for _, line := range lines {
-			if strings.HasPrefix(line, "CapPrm:") {
-				prm := strings.TrimSpace(strings.TrimPrefix(line, "CapPrm:"))
-				if strings.Contains(prm, "0000001") || strings.Contains(prm, "0000002") ||
-					strings.Contains(prm, "0000004") {
-					addFinding(p, "CAPS", "cap_sys_ptrace",
-						"SYS_PTRACE capability — can inject into other processes",
-						RiskMedium, true)
-				}
+			if mask, err := strconv.ParseUint(eff, 16, 64); err == nil && mask&capSysPtrace != 0 {
+				addFinding(p, "CAPS", "cap_sys_ptrace",
+					"SYS_PTRACE capability — can inject into other processes",
+					RiskMedium, true)
 			}
 		}
 	}
@@ -384,8 +368,12 @@ func scanWritablePath(p *AutoPrivilege) {
 				continue
 			}
 		}
-		if info.Mode().Perm()&0200 != 0 {
+		if isWritableByCurrentUser(dir) {
 			// Only flag if we don't own it
+			info, err := os.Stat(dir)
+			if err != nil {
+				continue
+			}
 			stat, ok := info.Sys().(*syscall.Stat_t)
 			if ok && stat.Uid != uid {
 				addFinding(p, "PATH", dir,
@@ -396,9 +384,10 @@ func scanWritablePath(p *AutoPrivilege) {
 	}
 }
 
-// isWritableByCurrentUser checks if the current user/group can write to a file
+// isWritableByCurrentUser checks if the current user/group can write to a file.
+// Uses Stat (not Lstat) so symlinks are resolved to their real target.
 func isWritableByCurrentUser(path string) bool {
-	info, err := os.Lstat(path)
+	info, err := os.Stat(path)
 	if err != nil {
 		return false
 	}
@@ -421,6 +410,38 @@ func isWritableByCurrentUser(path string) bool {
 	groups, _ := os.Getgroups()
 	for _, g := range groups {
 		if uint32(g) == stat.Gid && perm&0020 != 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// isReadableByCurrentUser checks if the current user/group can read a file.
+// Uses Stat (not Lstat) so symlinks are resolved to their real target.
+func isReadableByCurrentUser(path string) bool {
+	info, err := os.Stat(path)
+	if err != nil {
+		return false
+	}
+	uid := uint32(os.Getuid())
+	perm := info.Mode().Perm()
+	stat, ok := info.Sys().(*syscall.Stat_t)
+	if !ok {
+		return perm&0004 != 0
+	}
+	if stat.Uid == uid && perm&0400 != 0 {
+		return true
+	}
+	if perm&0004 != 0 {
+		return true
+	}
+	gid := uint32(os.Getgid())
+	if stat.Gid == gid && perm&0040 != 0 {
+		return true
+	}
+	groups, _ := os.Getgroups()
+	for _, g := range groups {
+		if uint32(g) == stat.Gid && perm&0040 != 0 {
 			return true
 		}
 	}
@@ -492,7 +513,7 @@ func scanKernelCVE(p *AutoPrivilege) {
 		{
 			cve:     "CVE-2022-0847",
 			pattern: "5.16.",
-			desc:    "PolaKit — polkit pkexec race condition",
+			desc:    "Dirty Pipe (kernel pipe buffer overwrite) — local root",
 			risk:    RiskHigh,
 			exploitFn: func() *ExploitResult {
 				return exploitKernelCVE("CVE-2022-0847", "polkit race condition LPE")
@@ -614,8 +635,12 @@ func scanConfigPasswords(p *AutoPrivilege) {
 	}
 
 	for _, cfg := range configPaths {
-		if _, err := os.Stat(cfg.path); err != nil {
+		info, err := os.Stat(cfg.path)
+		if err != nil {
 			continue
+		}
+		if info.IsDir() {
+			continue // directories (e.g. /etc/postgresql) are not credential files
 		}
 		if isWritableByCurrentUser(cfg.path) || isReadable(cfg.path) {
 			desc := cfg.desc
